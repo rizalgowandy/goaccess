@@ -1,4 +1,4 @@
-.TH goaccess 1 "MAY 2022" GNU+Linux "User Manuals"
+.TH goaccess 1 "MAY 2024" GNU+Linux "User Manuals"
 .SH NAME
 goaccess \- fast web log analyzer and interactive viewer.
 .SH SYNOPSIS
@@ -97,6 +97,9 @@ down by continent and country. It needs to be compiled with GeoLocation
 support.
 .IP "HTTP Status Codes"
 The values of the numeric status code to HTTP requests.
+.IP "ASN"
+This panel displays ASN (Autonomous System Numbers) data for GeoIP2 and legacy
+databases. Great for detecting malicious traffic and blocking accordingly.
 .IP "Remote User (HTTP authentication)"
 This is the userid of the person requesting the document as determined by HTTP
 authentication. If the document is not password protected, this part will be
@@ -204,6 +207,19 @@ If the timestamp is given in milliseconds
 .I %*
 must be used as date-format.
 .TP
+\fB\-\-datetime-format=<date_time_format>
+The date and time format combines the two variables into a single option. This
+gives the ability to get the timezone from a request and convert it to another
+timezone for output. See
+.I --tz=<timezone>
+.IP
+They all begin with a percentage (%) sign. See `man strftime`. e.g.,
+.I %d/%b/%Y:%H:%M:%S %z.
+.IP
+Note that if --datetime-format is used,
+.I %x
+must be passed in the log-format variable to represent the date and time field.
+.TP
 \fB\-\-log-format=<logformat>
 The log-format variable followed by a space or
 .I \\\\t
@@ -228,12 +244,22 @@ one variable and another predefined name in another variable.
   AWSELB       - Amazon Elastic Load Balancing,
   AWSS3        - Amazon Simple Storage Service (S3)
   AWSALB       - Amazon Application Load Balancer
-  CADDY        - Caddy's JSON Structured format
+  CADDY        - Caddy's JSON Structured format (local/info format)
+  TRAEFIKCLF   - Traefik's CLF flavor
+.IP
+.I Note:
+Generally, you need quotes around values that include white spaces, commas,
+pipes, quotes, and/or brackets. Inner quotes must be escaped.
 .IP
 .I Note:
 Piping data into GoAccess won't prompt a log/date/time configuration dialog,
 you will need to previously define it in your configuration file or in the
 command line.
+.IP
+.I Note:
+The default GoAccess format for CADDY is the 'local/info' format. Nevertheless,
+if needed, you have the option to utilize a custom GoAccess log format to match
+your particular configuration.
 .SS
 USER INTERFACE OPTIONS
 .TP
@@ -374,6 +400,18 @@ Do not show the last updated field displayed in the HTML generated report.
 .TP
 \fB\-\-no-parsing-spinner
 Do now show the progress metrics and parsing spinner.
+.TP
+\fB\-\-tz=<timezone>
+Outputs the report date/time data in the given timezone. Note that it uses the
+canonical timezone name. e.g.,
+.I Europe/Berlin
+or
+.I America/Chicago
+or
+.I Africa/Cairo
+If an invalid timezone name is given, the output will be in GMT. See
+.I --datetime-format
+in order to properly specify a timezone in the date/time format.
 .SS
 SERVER OPTIONS
 .P
@@ -444,7 +482,8 @@ GoAccess is running on a remote server, the host of the remote server should be
 specified here. Also, make sure it is a valid host and NOT an http address.
 .TP
 \fB\-\-ping-interval=<secs>
-Enable WebSocket ping with specified interval in seconds.
+Enable WebSocket ping with specified interval in seconds. This helps prevent
+idle connections getting disconnected.
 .TP
 \fB\-\-fifo-in=<path/file>
 Creates a named pipe (FIFO) that reads from on the given path/file.
@@ -484,6 +523,14 @@ Send all debug messages to the specified file.
 Specify a custom configuration file to use. If set, it will take priority over
 the global configuration file (if any).
 .TP
+\fB\-\-external-assets
+Output HTML assets to external JS/CSS files. Great if you are setting up
+Content Security Policy (CSP). This will create two separate files,
+.I goaccess.js
+and
+.I goaccess.css
+, in the same directory as your report.html file.
+.TP
 \fB\-\-invalid-requests=<filename>
 Log invalid requests to the specified file.
 .TP
@@ -506,7 +553,8 @@ flag.
 Enable IP resolver on HTML|JSON output.
 .TP
 \fB\-e \-\-exclude-ip=<IP|IP-range>
-Exclude an IPv4 or IPv6 from being counted.
+Exclude an IPv4 or IPv6 from being counted. Applicable solely during access log
+data processing, it does not exclude persisted data.
 Ranges can be included as well using a dash in between the IPs (start-end).
 .IP
 .I Examples:
@@ -514,6 +562,13 @@ Ranges can be included as well using a dash in between the IPs (start-end).
   exclude-ip 192.168.0.1-192.168.0.100
   exclude-ip ::1
   exclude-ip 0:0:0:0:0:ffff:808:804-0:0:0:0:0:ffff:808:808
+.TP
+\fB\-j \-\-jobs=<1-6>
+This specifies the number of parallel processing threads to be used during the
+execution of the program. It determines the degree of concurrency when
+analyzing log data, allowing for parallel processing of multiple tasks
+simultaneously. It defaults to 1 thread. It's common to set the number of jobs
+based on the available hardware resources, such as the number of CPU cores.
 .TP
 \fB\-H \-\-http-protocol=<yes|no>
 Set/unset HTTP request protocol. This will create a request key containing the
@@ -554,6 +609,30 @@ octet of IPv4 user IP addresses and the last 80 bits of IPv6 addresses to
 zeros.
 e.g., 192.168.20.100 => 192.168.20.0
 e.g., 2a03:2880:2110:df07:face:b00c::1 => 2a03:2880:2110:df07::
+.IP
+.I Note:
+This deactivates -a.
+.TP
+\fB\-\-chunk-size=<256-32768>
+This determines the number of lines that form a chunk. This parameter
+influences the size of the data processed concurrently by each thread, allowing
+for parallelization of the file reading and processing tasks. The value of
+chunk-size affects the efficiency of the parallel processing and can be
+adjusted based on factors such as system resources and the characteristics of
+the input data.
+
+.IP
+Low Values: If chunk-size is set too low, it might result in inefficient
+processing. For instance, if each chunk contains a very small number of lines,
+the overhead of managing and coordinating parallel processing might outweigh
+the benefits.
+
+.IP
+Large Values: Conversely, if chunk-size is set too high, it could lead to
+resource exhaustion. Each chunk represents a portion of data that a thread
+processes in parallel. Setting chunk-size to an excessively large value might
+cause memory issues, particularly if there are many parallel threads running
+simultaneously.
 .TP
 \fB\-\-anonymize-level
 Specifies the anonymization levels: 1 => default, 2 => strong, 3 => pedantic.
@@ -616,6 +695,12 @@ Enable parsing and displaying the given panel.
   MIME_TYPE
   TLS_TYPE
 .TP
+\fB\-\-fname-as-vhost=<regex>
+Use log filename(s) as virtual host(s). POSIX regex is passed to extract
+the virtual host from the filename. e.g.,
+.I --fname-as-vhost='[a-z]*\.[a-z]*'
+can be used to extract awesome.com.log => awesome.com.
+.TP
 \fB\-\-hide-referrer=<NEEDLE>
 Hide a referrer but still count it. Wild cards are allowed in the needle. i.e.,
 *.bing.com.
@@ -629,6 +714,9 @@ traffic on your server at specific times.
 .TP
 \fB\-\-ignore-crawlers
 Ignore crawlers from being counted.
+.TP
+\fB\-\-unknowns-as-crawlers
+Classify unknown OS and browsers as crawlers.
 .TP
 \fB\-\-ignore-panel=<PANEL>
 Ignore parsing and displaying the given panel.
@@ -654,7 +742,7 @@ Ignore parsing and displaying the given panel.
   TLS_TYPE
 .TP
 \fB\-\-ignore-referrer=<referrer>
-Ignore referers from being counted. Wildcards allowed. e.g.,
+Ignore referrers from being counted. Wildcards allowed. e.g.,
 .I
 *.domain.com
 .I
@@ -903,6 +991,8 @@ The time taken to serve the request, in microseconds as a decimal number.
 The time taken to serve the request, in seconds with milliseconds resolution.
 .IP %L
 The time taken to serve the request, in milliseconds as a decimal number.
+.IP %n
+The time taken to serve the request, in nanoseconds.
 .IP %^
 Ignore this field.
 .IP %~
@@ -1043,6 +1133,10 @@ or to parse from the beginning of the file while maintaining the pipe opened
 and applying a filter
 .IP
 # tail -f -n +0 access.log | grep -i --line-buffered 'firefox' | goaccess --log-format=COMBINED -o report.html --real-time-html -
+.P
+or to convert the log date timezone to a different timezone, e.g., Europe/Berlin
+.IP
+# goaccess access.log --log-format='%h %^[%x] "%r" %s %b "%R" "%u"' --datetime-format='%d/%b/%Y:%H:%M:%S %z' --tz=Europe/Berlin --date-spec=min
 .SS
 MULTIPLE LOG FILES
 .P
@@ -1241,6 +1335,15 @@ default value of 366 items per panel.
 .P
 A hit is a request (line in the access log), e.g., 10 requests = 10 hits. HTTP
 requests with the same IP, date, and user agent are considered a unique visit.
+.P
+
+If you want to enable dual-stack support, please use
+.I --addr=::
+instead of the default
+.I --addr=0.0.0.0.
+.P
+The generated report will attempt to reconnect to the WebSocket server after 1
+second with exponential backoff. It will attempt to connect 20 times.
 .SH BUGS
 If you think you have found a bug, please send me an email to
 .I goaccess@prosoftcorp.com

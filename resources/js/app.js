@@ -99,10 +99,21 @@ window.GoAccess = window.GoAccess || {
 		this.setWebSocket(wsConn);
 	},
 
+	buildWSURI: function (wsConn) {
+		var url = null;
+		if (!wsConn.url || !wsConn.port)
+			return null;
+		url = /^wss?:\/\//i.test(wsConn.url) ? wsConn.url : window.location.protocol === "https:" ? 'wss://' + wsConn.url : 'ws://' + wsConn.url;
+		return new URL(url).protocol + '//' + new URL(url).hostname + ':' + wsConn.port + new URL(url).pathname;
+	},
+
 	setWebSocket: function (wsConn) {
-		var host = null, pingId = null;
-		host = wsConn.url ? wsConn.url : window.location.hostname ? window.location.hostname : "localhost";
-		var str = /^(wss?:\/\/)?[^\/]+:[0-9]{1,5}\//.test(host + "/") ? host : String(host + ':' + wsConn.port);
+		var host = null, pingId = null, uri = null, defURI = null, str = null;
+
+		defURI = window.location.hostname ? window.location.hostname + ':' + wsConn.port : "localhost" + ':' + wsConn.port;
+		uri = wsConn.url && /^(wss?:\/\/)?[^\/]+:[0-9]{1,5}/.test(wsConn.url) ? wsConn.url : this.buildWSURI(wsConn);
+
+		str = uri || defURI;
 		str = !/^wss?:\/\//i.test(str) ? (window.location.protocol === "https:" ? 'wss://' : 'ws://') + str : str;
 
 		var socket = new WebSocket(str);
@@ -114,7 +125,7 @@ window.GoAccess = window.GoAccess || {
 			if (wsConn.ping_interval)
 				pingId = setInterval(() => { socket.send('ping'); }, wsConn.ping_interval * 1E3);
 
-			GoAccess.Nav.WSOpen();
+			GoAccess.Nav.WSOpen(str);
 		}.bind(this);
 
 		socket.onmessage = function (event) {
@@ -157,7 +168,7 @@ GoAccess.Util = {
 		}, 0) >>> 0).toString(16);
 	},
 
-	// Format bytes to human readable
+	// Format bytes to human-readable
 	formatBytes: function (bytes, decimals, numOnly) {
 		if (bytes == 0)
 			return numOnly ? 0 : '0 Byte';
@@ -173,7 +184,7 @@ GoAccess.Util = {
 		return !isNaN(parseFloat(n)) && isFinite(n);
 	},
 
-	// Format microseconds to human readable
+	// Format microseconds to human-readable
 	utime2str: function (usec) {
 		if (usec >= 864E8)
 			return ((usec) / 864E8).toFixed(2) + ' d';
@@ -209,8 +220,8 @@ GoAccess.Util = {
 		if (n >= 1e12) return +(n / 1e12).toFixed(1) + "T";
 	},
 
-	// Format field value to human readable
-	fmtValue: function (value, dataType, decimals, shorten) {
+	// Format field value to human-readable
+	fmtValue: function (value, dataType, decimals, shorten, hlregex, hlvalue) {
 		var val = 0;
 		if (!dataType)
 			val = value;
@@ -230,7 +241,7 @@ GoAccess.Util = {
 			val = this.formatBytes(value, decimals);
 			break;
 		case 'percent':
-			val = parseFloat(value.replace(',', '.')).toFixed(2) + '%';
+			val = value.replace(',', '.') + '%';
 			break;
 		case 'time':
 			if (this.isNumeric(value))
@@ -245,7 +256,20 @@ GoAccess.Util = {
 			val = value;
 		}
 
-		return value == 0 ? String(val) : val;
+		if (hlregex) {
+			let o = JSON.parse(hlregex), tmp = '';
+			for (var x in o) {
+				if (!val) continue;
+				tmp = val.replace(new RegExp(x, 'gi'), o[x]);
+				if (tmp != val) {
+					val = tmp;
+					break;
+				}
+				val = tmp;
+			}
+		}
+
+		return value == 0 ? String(val) : (val === undefined ? '—' : val);
 	},
 
 	isPanelHidden: function (panel) {
@@ -337,6 +361,8 @@ GoAccess.Util = {
 
 // OVERALL STATS
 GoAccess.OverallStats = {
+	total_requests: 0,
+
 	// Render each overall stats box
 	renderBox: function (data, ui, row, x, idx) {
 		var wrap = $('.wrap-general-items');
@@ -388,6 +414,7 @@ GoAccess.OverallStats = {
 	initialize: function () {
 		var ui = GoAccess.getPanelUI('general');
 		var data = GoAccess.getPanelData('general');
+		this.total_requests = data.total_requests;
 
 		this.renderData(data, ui);
 	}
@@ -585,6 +612,7 @@ GoAccess.Nav = {
 		case 'status_codes'    : return 'warning';
 		case 'remote_user'     : return 'users';
 		case 'geolocation'     : return 'map-marker';
+		case 'asn'             : return 'map-marker';
 		case 'mime_type'       : return 'file-o';
 		case 'tls_type'        : return 'warning';
 		default                : return 'pie-chart';
@@ -671,10 +699,10 @@ GoAccess.Nav = {
 		});
 	},
 
-	WSOpen: function () {
+	WSOpen: function (str) {
 		$$('.nav-ws-status', function (item) {
 			item.classList.add('connected');
-			item.setAttribute('title', 'Connected to ' + GoAccess.AppWSConn.url);
+			item.setAttribute('title', 'Connected to ' + str);
 		});
 	},
 
@@ -1030,7 +1058,7 @@ GoAccess.Charts = {
 		}
 	},
 
-	// Iterate over the item properties and and extract the count value.
+	// Iterate over the item properties and extract the count value.
 	extractCount: function (item) {
 		var o = {};
 		for (var prop in item)
@@ -1064,6 +1092,16 @@ GoAccess.Charts = {
 		for (var prop in key)
 			arr.push(datum[key[prop]]);
 		return arr.join(' ');
+	},
+
+	getWMap: function (panel, plotUI, data) {
+		var chart = WorldMap(d3.select("#chart-" + panel));
+		chart.width($("#chart-" + panel).getBoundingClientRect().width);
+		chart.height(400);
+		chart.metric(plotUI['d3']['y0']['key']);
+		chart.opts(plotUI);
+
+		return chart;
 	},
 
 	getAreaSpline: function (panel, plotUI, data) {
@@ -1158,6 +1196,9 @@ GoAccess.Charts = {
 		case 'bar':
 			chart = this.getVBar(panel, plotUI, data);
 			break;
+		case 'wmap':
+			chart = this.getWMap(panel, plotUI, data);
+			break;
 		}
 
 		return chart;
@@ -1168,7 +1209,7 @@ GoAccess.Charts = {
 		d3.select('#chart-' + panel + '>.chart-tooltip-wrap')
 			.remove();
 		// remove svg
-		d3.select('#chart-' + panel).select('svg')
+		d3.select('#chart-' + panel).selectAll('svg')
 			.remove();
 		// add chart to the document
 		d3.select("#chart-" + panel)
@@ -1222,7 +1263,8 @@ GoAccess.Charts = {
 
 		d3.select("#chart-" + panel)
 			.datum(this.processChartData(this.getPanelData(panel, data)))
-			.call(chart.width($("#chart-" + panel).offsetWidth));
+			.call(chart.width($("#chart-" + panel).offsetWidth))
+			.append("div").attr("class", "chart-tooltip-wrap");
 	},
 
 	// Reload (doesn't redraw) all chart's data
@@ -1466,7 +1508,7 @@ GoAccess.Tables = {
 		// use metaType if exist else fallback to dataType
 		var vtype = ui.metaType || ui.dataType;
 		var className = ui.className || '';
-		className += ui.dataType != 'string' ? 'text-right' : '';
+		className += !['string'].includes(ui.dataType) ? 'text-right' : '';
 		return {
 			'className': className,
 			'value'    : val ? GoAccess.Util.fmtValue(val, vtype) : null,
@@ -1547,11 +1589,11 @@ GoAccess.Tables = {
 	// e.g., value = Object {count: 14351, percent: 5.79}
 	getObjectCell: function (panel, ui, value) {
 		var className = ui.className || '';
-		className += ui.dataType != 'string' ? 'text-right' : '';
+		className += !['string'].includes(ui.dataType) ? 'text-right' : '';
 		return {
 			'className': className,
 			'percent': GoAccess.Util.getPercent(value),
-			'value': GoAccess.Util.fmtValue(GoAccess.Util.getCount(value), ui.dataType)
+			'value': GoAccess.Util.fmtValue(GoAccess.Util.getCount(value), ui.dataType, null, null, ui.hlregex, ui.hlvalue, ui.hlidx)
 		};
 	},
 
@@ -1792,14 +1834,28 @@ GoAccess.App = {
 	sortData: function (panel, field, order) {
 		// panel's data
 		var panelData = GoAccess.getPanelData(panel).data;
-		panelData.sort(function (a, b) {
-			a = this.sortField(a, field);
-			b = this.sortField(b, field);
 
-			if (typeof a === 'string' && typeof b === 'string')
-				return 'asc' == order ? a.localeCompare(b) : b.localeCompare(a);
-			return  'asc' == order ? a - b : b - a;
-		}.bind(this));
+		// Function to sort an array of objects
+		var sortArray = function(arr) {
+			arr.sort(function (a, b) {
+				a = this.sortField(a, field);
+				b = this.sortField(b, field);
+
+				if (typeof a === 'string' && typeof b === 'string')
+					return 'asc' == order ? a.localeCompare(b) : b.localeCompare(a);
+				return  'asc' == order ? a - b : b - a;
+			}.bind(this));
+		}.bind(this);
+
+		// Sort panelData
+		sortArray(panelData);
+
+		// Sort the items sub-array
+		panelData.forEach(function(item) {
+			if (item.items) {
+				sortArray(item.items);
+			}
+		});
 	},
 
 	setInitSort: function () {
@@ -1840,6 +1896,13 @@ GoAccess.App = {
 		// update data and charts if tab/document has focus
 		if (!this.hasFocus)
 			return;
+
+		// some panels may not have been properly rendered since no data was
+		// passed when bootstrapping the report, thus we do a one full
+		// re-render of all panels
+		if (GoAccess.OverallStats.total_requests == 0 && GoAccess.OverallStats.total_requests != GoAccess.AppData.general.total_requests)
+			GoAccess.Panels.initialize();
+		GoAccess.OverallStats.total_requests = GoAccess.AppData.general.total_requests;
 
 		this.verifySort();
 		GoAccess.OverallStats.initialize();

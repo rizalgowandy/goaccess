@@ -6,7 +6,7 @@
  * \____/\____/_/  |_\___/\___/\___/____/____/
  *
  * The MIT License (MIT)
- * Copyright (c) 2009-2022 Gerardo Orellana <hello @ goaccess.io>
+ * Copyright (c) 2009-2024 Gerardo Orellana <hello @ goaccess.io>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -32,7 +32,8 @@
 
 #define MTRC_ID_COUNTRY  0
 #define MTRC_ID_CITY     1
-#define MTRC_ID_HOSTNAME 2
+#define MTRC_ID_ASN      2
+#define MTRC_ID_HOSTNAME 3
 
 #include "commons.h"
 #include "sort.h"
@@ -40,8 +41,8 @@
 /* Default Anonymization Levels */
 typedef enum GAnonymizeLevels_ {
   ANONYMIZE_DEFAULT = 1,
-  ANONIMYZE_STRONG,
-  ANONIMYZE_PEDANTIC,
+  ANONYMIZE_STRONG,
+  ANONYMIZE_PEDANTIC,
 } GAnonymizeLevels;
 
 /* Function Prototypes */

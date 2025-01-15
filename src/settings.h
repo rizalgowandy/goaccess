@@ -6,7 +6,7 @@
  * \____/\____/_/  |_\___/\___/\___/____/____/
  *
  * The MIT License (MIT)
- * Copyright (c) 2009-2022 Gerardo Orellana <hello @ goaccess.io>
+ * Copyright (c) 2009-2024 Gerardo Orellana <hello @ goaccess.io>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -35,6 +35,7 @@
 
 #define MAX_LINE_CONF        4096
 #define MAX_EXTENSIONS        128
+#define MAX_GEOIP_DBS           3
 #define MAX_IGNORE_IPS 1024 + 128
 #define MAX_IGNORE_REF         64
 #define MAX_CUSTOM_COLORS      64
@@ -57,6 +58,7 @@ typedef enum LOGTYPE {
   AWSS3,
   CADDY,
   AWSALB,
+  TRAEFIKCLF,
 } GLogType;
 
 /* predefined log times */
@@ -88,6 +90,7 @@ typedef struct GPreConfLog_ {
   const char *awss3;
   const char *caddy;
   const char *awsalb;
+  const char *traefikclf;
 } GPreConfLog;
 
 /* *INDENT-OFF* */
@@ -102,12 +105,15 @@ typedef struct GConf_
   const char *ignore_ips[MAX_IGNORE_IPS];       /* array of ips to ignore */
   const char *ignore_panels[TOTAL_MODULES];     /* array of panels to ignore */
   const char *ignore_referers[MAX_IGNORE_REF];  /* referrers to ignore */
-  const char *ignore_status[MAX_IGNORE_STATUS]; /* status to ignore */
+  int ignore_status[MAX_IGNORE_STATUS]; /* status to ignore */
   const char *output_formats[MAX_OUTFORMATS];   /* output format, e.g. , HTML */
   const char *sort_panels[TOTAL_MODULES];       /* sorting options for each panel */
   const char *static_files[MAX_EXTENSIONS];     /* static extensions */
+  const char *geoip_databases[MAX_GEOIP_DBS];    /* geoip db paths */
 
   /* Log/date/time formats */
+  const char *tz_name;                    /* Canonical TZ name, e.g., America/Chicago */
+  char *date_time_format;           /* date & time format */
   char *date_format;                /* date format */
   char *date_num_format;            /* numeric date format %Y%m%d */
   char *time_format;                /* time format as given by the user */
@@ -118,7 +124,6 @@ typedef struct GConf_
   char ***user_browsers_hash;       /* custom list of browsers */
 
   const char *debug_log;            /* debug log path */
-  const char *geoip_database;       /* geoip db path */
   const char *html_custom_css;      /* custom CSS */
   const char *html_custom_js;       /* custom JS */
   const char *html_prefs;           /* default HTML JSON preferences */
@@ -128,6 +133,7 @@ typedef struct GConf_
   const char *pidfile;              /* daemonize pid file path */
   const char *browsers_file;        /* browser's file path */
   const char *db_path;              /* db path to files */
+  const char *fname_as_vhost;       /* filenames as vhost/server blocks */
 
   /* HTML real-time */
   const char *addr;                 /* IP address to bind to */
@@ -150,16 +156,20 @@ typedef struct GConf_
   int client_err_to_unique_count;   /* count 400s as visitors */
   int code444_as_404;               /* 444 as 404s? */
   int color_scheme;                 /* color scheme */
-  int crawlers_only ;               /* crawlers only */
+  int chunk_size;                   /* chunk size for each thread */
+  int crawlers_only;                /* crawlers only */
   int daemonize;                    /* run program as a Unix daemon */
   const char *username;             /* user to run program as */
   int double_decode;                /* need to double decode */
+  int external_assets;              /* write JS/CSS assets to external files */
   int enable_html_resolver;         /* html/json/csv resolver */
   int geo_db;                       /* legacy geoip db */
   int hl_header;                    /* highlight header on term */
   int ignore_crawlers;              /* ignore crawlers */
+  int unknowns_as_crawlers;         /* unknown OS and browsers are classified as crawlers */
   int ignore_qstr;                  /* ignore query string */
   int ignore_statics;               /* ignore static files */
+  int jobs;                         /* multi-thread jobs count */
   int json_pretty_print;            /* pretty print JSON data */
   int list_agents;                  /* show list of agents per host */
   int load_conf_dlg;                /* load curses config dialog */
@@ -168,7 +178,7 @@ typedef struct GConf_
   int mouse_support;                /* add curses mouse support */
   int no_color;                     /* no terminal colors */
   int no_strict_status;             /* don't enforce 100-599 status codes */
-  int no_column_names;              /* don't show col names on termnal */
+  int no_column_names;              /* don't show col names on terminal */
   int no_csv_summary;               /* don't show overall metrics */
   int no_html_last_updated;         /* don't show HTML last updated field */
   int no_ip_validation;             /* don't validate client IP addresses */
@@ -193,6 +203,7 @@ typedef struct GConf_
   int date_spec_hr;                 /* date specificity - hour */
   int has_geocity;
   int has_geocountry;
+  int has_geoasn;
   int hour_spec_min;                /* hour specificity - min */
   int read_stdin;                   /* read from stdin */
   int serve_usecs;                  /* is there time served within req line */
@@ -211,6 +222,7 @@ typedef struct GConf_
   int output_format_idx;            /* output format index */
   int sort_panel_idx;               /* sort panel index */
   int static_file_idx;              /* static extensions index */
+  int geoip_db_idx;                 /* geoip db index */
   int browsers_hash_idx;            /* browsers hash index */
 
   size_t static_file_max_len;
