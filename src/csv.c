@@ -7,7 +7,7 @@
  * \____/\____/_/  |_\___/\___/\___/____/____/
  *
  * The MIT License (MIT)
- * Copyright (c) 2009-2022 Gerardo Orellana <hello @ goaccess.io>
+ * Copyright (c) 2009-2024 Gerardo Orellana <hello @ goaccess.io>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -38,9 +38,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <time.h>
-#include <unistd.h>
 #include <inttypes.h>
 
 #include "csv.h"
@@ -62,7 +60,7 @@ static void print_csv_data (FILE * fp, GHolder * h, GPercTotals totals);
 
 /* *INDENT-OFF* */
 /* A function pointer for each panel */
-static GPanel paneling[] = {
+static const GPanel paneling[] = {
   {VISITORS        , print_csv_data} ,
   {REQUESTS        , print_csv_data} ,
   {REQUESTS_STATIC , print_csv_data} ,
@@ -80,6 +78,7 @@ static GPanel paneling[] = {
   {CACHE_STATUS    , print_csv_data} ,
 #ifdef HAVE_GEOLOCATION
   {GEO_LOCATION    , print_csv_data} ,
+  {ASN             , print_csv_data} ,
 #endif
   {MIME_TYPE       , print_csv_data} ,
   {TLS_TYPE        , print_csv_data} ,
@@ -90,7 +89,7 @@ static GPanel paneling[] = {
  *
  * On error, or if not found, NULL is returned.
  * On success, the panel value is returned. */
-static GPanel *
+static const GPanel *
 panel_lookup (GModule module) {
   int i, num_panels = ARRAY_SIZE (paneling);
 
@@ -103,7 +102,7 @@ panel_lookup (GModule module) {
 
 /* Iterate over the string and escape CSV output. */
 static void
-escape_cvs_output (FILE * fp, char *s) {
+escape_cvs_output (FILE *fp, char *s) {
   while (*s) {
     switch (*s) {
     case '"':
@@ -121,7 +120,7 @@ escape_cvs_output (FILE * fp, char *s) {
  *
  * On success, outputs item value. */
 static void
-print_csv_metric_block (FILE * fp, GMetrics * nmetrics) {
+print_csv_metric_block (FILE *fp, GMetrics *nmetrics) {
   /* basic metrics */
   fprintf (fp, "\"%" PRIu64 "\",", nmetrics->hits);
   fprintf (fp, "\"%4.2f%%\",", nmetrics->hits_perc);
@@ -162,7 +161,7 @@ print_csv_metric_block (FILE * fp, GMetrics * nmetrics) {
  * On error, it exits early.
  * On success, outputs item value. */
 static void
-print_csv_sub_items (FILE * fp, GHolder * h, int idx, GPercTotals totals) {
+print_csv_sub_items (FILE *fp, GHolder *h, int idx, GPercTotals totals) {
   GMetrics *nmetrics;
   GSubList *sub_list = h->items[idx].sub_list;
   GSubItem *iter;
@@ -176,7 +175,7 @@ print_csv_sub_items (FILE * fp, GHolder * h, int idx, GPercTotals totals) {
     set_data_metrics (iter->metrics, &nmetrics, totals);
 
     fprintf (fp, "\"%d\",", i); /* idx */
-    fprintf (fp, "\"%d\",", idx);       /* parent idx */
+    fprintf (fp, "\"%d\",", idx); /* parent idx */
     fprintf (fp, "\"%s\",", module_to_id (h->module));
 
     /* output metrics */
@@ -189,7 +188,7 @@ print_csv_sub_items (FILE * fp, GHolder * h, int idx, GPercTotals totals) {
  *
  * On success, outputs item value. */
 static void
-print_csv_data (FILE * fp, GHolder * h, GPercTotals totals) {
+print_csv_data (FILE *fp, GHolder *h, GPercTotals totals) {
   GMetrics *nmetrics;
   int i;
 
@@ -197,7 +196,7 @@ print_csv_data (FILE * fp, GHolder * h, GPercTotals totals) {
     set_data_metrics (h->items[i].metrics, &nmetrics, totals);
 
     fprintf (fp, "\"%d\",", i); /* idx */
-    fprintf (fp, ",");  /* no parent */
+    fprintf (fp, ","); /* no parent */
     fprintf (fp, "\"%s\",", module_to_id (h->module));
 
     /* output metrics */
@@ -213,7 +212,7 @@ print_csv_data (FILE * fp, GHolder * h, GPercTotals totals) {
 #pragma GCC diagnostic ignored "-Wformat-nonliteral"
 /* Output general statistics information. */
 static void
-print_csv_summary (FILE * fp) {
+print_csv_summary (FILE *fp) {
   char now[DATE_TIME];
   char *source = NULL;
   const char *fmt;
@@ -289,9 +288,9 @@ print_csv_summary (FILE * fp) {
 
 #pragma GCC diagnostic warning "-Wformat-nonliteral"
 
-/* Entry point to generate a a csv report writing it to the fp */
+/* Entry point to generate a csv report writing it to the fp */
 void
-output_csv (GHolder * holder, const char *filename) {
+output_csv (GHolder *holder, const char *filename) {
   GModule module;
   GPercTotals totals;
   const GPanel *panel = NULL;
